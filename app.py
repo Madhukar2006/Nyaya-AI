@@ -11,8 +11,6 @@ from config import GEMINI_API_KEY, SECRET_KEY
 from database.db import get_db, init_db
 from services.ai_service import analyze_legal_document, get_legal_response
 
-# AI assistance: ChatGPT/Codex helped draft and debug parts of this application.
-# Madhukar Pal reviewed and adapted the implementation for the NyayaAI project.
 app = Flask(__name__)
 app.config.update(
     SECRET_KEY=SECRET_KEY or secrets.token_hex(32),
