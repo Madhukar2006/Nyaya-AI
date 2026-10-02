@@ -1,7 +1,7 @@
 # ⚖️ NyayaAI
 
 > **AI-powered legal information & document assistant.**
-
+  
 NyayaAI helps users explore general legal information, ask questions, save conversations, and review documents using AI.
 
 ### ✨ Features
@@ -30,8 +30,8 @@ python app.py
 Create a `.env` file:
 
 ```env
-GEMINI_API_KEY=your_api_key
-SECRET_KEY=your_secret_key
+GEMINI_API_KEY = your_api_key
+SECRET_KEY = your_secret_key
 ```
 
 ### ⚠️ Disclaimer
