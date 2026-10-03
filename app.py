@@ -1,450 +1,649 @@
-import logging
-import secrets
-import uuid
-from pathlib import Path
-
-from flask import Flask, abort, flash, redirect, render_template, request, send_file, session, url_for
-from werkzeug.security import check_password_hash, generate_password_hash
-from werkzeug.utils import secure_filename
-
-from config import GEMINI_API_KEY, SECRET_KEY
-from database.db import get_db, init_db
-from services.ai_service import analyze_legal_document, get_legal_response
+import os
+from datetime import datetime
+from functools import wraps
+from flask import (Flask, render_template, request, redirect, url_for,
+                   session, flash, jsonify)
+from werkzeug.security import generate_password_hash, check_password_hash
+from config import Config
+from database.db import (
+    init_db,
+    get_user_by_username, get_user_by_email, create_user, get_user_by_id, update_user,
+    create_conversation, get_conversations_by_user, get_conversation_by_id,
+    delete_conversation, add_message, get_messages_by_conversation,
+    update_conversation_title, get_conversation_count,
+    save_document, get_documents_by_user, get_document_by_id,
+    delete_document, get_document_count
+)
+from services.ai_service import get_ai_response, analyze_document
+from services.document_service import (
+    allowed_file, save_uploaded_file, extract_text, cleanup_file, get_file_extension
+)
 
 app = Flask(__name__)
-app.config.update(
-    SECRET_KEY=SECRET_KEY or secrets.token_hex(32),
-    MAX_CONTENT_LENGTH=5 * 1024 * 1024,
-)
-logger = logging.getLogger(__name__)
-BASE_DIR = Path(__file__).resolve().parent
-UPLOAD_DIR = BASE_DIR / "uploads"
-ALLOWED_EXTENSIONS = {"pdf", "txt", "md", "docx"}
-init_db()
+app.config.from_object(Config)
 
+# ── Jinja2 filters ────────────────────────────────────────────────────────────
 
-def current_user():
-    if "user_id" not in session:
-        return None
-    db = get_db()
-    user = db.execute(
-        "SELECT id, username, email, created_at FROM users WHERE id = ?",
-        (session["user_id"],),
-    ).fetchone()
-    db.close()
-    if user is None:
-        session.clear()
-    return user
+@app.template_filter('datetimeformat')
+def datetimeformat(value, fmt='%B %d, %Y'):
+    """Format a SQLite datetime string for display in templates."""
+    if not value:
+        return ''
+    if isinstance(value, str):
+        for pattern in ('%Y-%m-%d %H:%M:%S', '%Y-%m-%d %H:%M:%S.%f', '%Y-%m-%d'):
+            try:
+                return datetime.strptime(value, pattern).strftime(fmt)
+            except ValueError:
+                continue
+        return value
+    if hasattr(value, 'strftime'):
+        return value.strftime(fmt)
+    return str(value)
 
+init_db(app)
 
-def login_required():
-    if current_user() is None:
-        return redirect(url_for("login"))
-    return None
+# ── Auth decorator ────────────────────────────────────────────────────────────
 
+def login_required(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if 'user_id' not in session:
+            flash('Please log in to access this page.', 'error')
+            return redirect(url_for('login'))
+        return f(*args, **kwargs)
+    return decorated
 
-@app.context_processor
-def template_context():
-    return {"nav_user": current_user(), "csrf_token": session.get("csrf_token", "")}
+# ── Legal Library data ────────────────────────────────────────────────────────
 
+LEGAL_TOPICS = {
+    'contracts': {
+        'title': 'Contracts & Agreements',
+        'icon': '📄',
+        'description': 'Understand contracts, agreements, and what to do if one is breached.',
+        'content': {
+            'overview': 'The Indian Contract Act, 1872 governs contracts in India. A valid contract requires a lawful offer, acceptance, consideration (something of value exchanged), free consent, legal capacity of parties, and a lawful object. Both written and oral contracts can be legally binding, but written contracts are far easier to prove.',
+            'common_types': [
+                'Breach of contract — one party fails to fulfil their obligations',
+                'Non-payment under agreements or purchase orders',
+                'Fraud or misrepresentation in contracts',
+                'Void and voidable agreements',
+                'Employment and service contract disputes',
+                'Rental and lease agreement disputes',
+                'Sale of goods disputes',
+                'Non-disclosure agreement (NDA) violations',
+            ],
+            'what_to_do': [
+                'Always get agreements in writing — even for small matters',
+                'Read every clause carefully before signing anything',
+                'Keep copies of all signed contracts and related communications',
+                'If a breach occurs, send a written legal notice first',
+                'Approach civil court or use arbitration as specified in the contract',
+                'Keep records of all payment proofs, emails, and communications',
+            ],
+            'note': 'Always have important contracts reviewed by a lawyer before signing. Verbal contracts can be legally valid but are very difficult to prove in court. For high-value agreements, always use a registered written contract.'
+        }
+    },
+    'consumer_rights': {
+        'title': 'Consumer Rights',
+        'icon': '🛡️',
+        'description': 'Understand your rights as a consumer under Indian law.',
+        'content': {
+            'overview': 'The Consumer Protection Act, 2019 protects the rights of consumers in India and provides effective mechanisms for redressal of grievances. Every consumer has the right to be protected against unfair trade practices, defective goods, and deficient services.',
+            'common_types': [
+                'Defective products or goods',
+                'Deficient or poor services',
+                'Unfair trade practices by businesses',
+                'Misleading advertisements',
+                'Overcharging or billing errors',
+                'E-commerce disputes and online shopping issues',
+                'Insurance claim rejections',
+                'Bank and financial service complaints',
+            ],
+            'what_to_do': [
+                'Keep all purchase receipts, invoices, and warranties',
+                'First complain to the seller, company, or service provider in writing',
+                'File a complaint on the National Consumer Helpline: 1800-11-4000',
+                'File online complaint at consumerhelpline.gov.in',
+                'Approach District Consumer Commission for disputes up to ₹1 crore',
+                'State Consumer Commission handles disputes from ₹1 crore to ₹10 crore',
+                'Collect all evidence: photos, receipts, emails, chat records',
+            ],
+            'note': 'Consumer courts provide an affordable and faster alternative to civil courts. In many cases, you can file a complaint yourself without a lawyer. The filing fees are very low. Time limit to file is generally 2 years from the cause of action.'
+        }
+    },
+    'employment': {
+        'title': 'Employment Law',
+        'icon': '💼',
+        'description': 'Know your rights as an employee under Indian labour laws.',
+        'content': {
+            'overview': 'Indian employment law covers wages, working conditions, termination, maternity benefits, and more. Key laws include the Industrial Disputes Act, 1947, Shops and Establishments Act, Payment of Wages Act, and the new Labour Codes. The applicable law depends on the type of employer and industry.',
+            'common_types': [
+                'Wrongful termination or illegal retrenchment',
+                'Non-payment of salary, dues, or full and final settlement',
+                'Workplace harassment under the POSH Act, 2013',
+                'Denial of leave, maternity benefits, or statutory rights',
+                'Provident Fund (PF) and ESI related disputes',
+                'Contractual disputes and bond enforcement',
+                'Discrimination at the workplace',
+            ],
+            'what_to_do': [
+                'Keep copies of your offer letter, employment contract, and salary slips',
+                'Raise complaints with HR formally in writing — keep copies',
+                'Approach the Labour Commissioner or Labour Court for wage disputes',
+                'File a POSH complaint with the Internal Complaints Committee (ICC)',
+                'Contact EPFO (Employees\' Provident Fund Organisation) for PF issues',
+                'Check the Shops and Establishments Act applicable to your state',
+            ],
+            'note': 'Labour laws differ for the organised and unorganised sectors. The applicable law depends on your employer\'s size, industry, and your employment type. It is strongly recommended to consult a labour law specialist for serious workplace disputes.'
+        }
+    },
+    'cyber_crime': {
+        'title': 'Cyber Crime',
+        'icon': '🔐',
+        'description': 'Learn about online fraud, cyberbullying, hacking, and digital crimes.',
+        'content': {
+            'overview': 'Cyber crimes are offences committed using computers, mobile devices, or the internet. In India, cyber crimes are primarily governed by the Information Technology Act, 2000 (IT Act) and the Bharatiya Nyaya Sanhita (BNS), 2023 which replaced IPC.',
+            'common_types': [
+                'Online fraud, phishing, and scam calls',
+                'Identity theft and impersonation',
+                'Cyberbullying, online harassment, and stalking',
+                'Hacking and unauthorized account access',
+                'Spreading fake, defamatory, or morphed content online',
+                'Online financial fraud (UPI scams, banking fraud)',
+                'Ransomware and data theft',
+                'Child pornography and online exploitation',
+            ],
+            'what_to_do': [
+                'Do NOT respond or transfer money to suspicious calls or messages',
+                'File a cybercrime complaint at cybercrime.gov.in (official government portal)',
+                'Call National Cybercrime Helpline: 1930',
+                'Contact your bank immediately if financial fraud occurs — request transaction reversal',
+                'Keep all evidence: screenshots, call recordings, transaction IDs',
+                'File an FIR at the nearest police station or cybercrime cell',
+                'Report to platform (WhatsApp, Instagram, etc.) for content removal',
+            ],
+            'note': 'Act quickly in cases of financial cyber fraud — report to your bank within hours. The IT Act, 2000 provides legal framework for cyber crimes with penalties varying based on the offence. Always consult a cyber law specialist for serious cases.'
+        }
+    },
+    'property': {
+        'title': 'Property Law',
+        'icon': '🏠',
+        'description': 'Learn about property rights, ownership, disputes, and registration.',
+        'content': {
+            'overview': 'Property law in India covers the transfer, ownership, registration, and disputes related to immovable property. Key laws include the Transfer of Property Act, 1882, Registration Act, 1908, and RERA (Real Estate Regulation and Development Act, 2016).',
+            'common_types': [
+                'Property boundary and encroachment disputes',
+                'Title and ownership disputes',
+                'Tenant-landlord disputes and eviction matters',
+                'Property fraud, forgery of documents',
+                'Inheritance and succession disputes',
+                'Builder-buyer disputes (delays, quality, possession)',
+                'Land acquisition disputes',
+            ],
+            'what_to_do': [
+                'Always verify property documents before buying — check title, encumbrances',
+                'Check for pending dues, mortgages, or liens at the sub-registrar office',
+                'Mandatory registration of property sale deed at the sub-registrar office',
+                'File complaints against builders on the RERA portal of your state',
+                'Get legal opinion from a property lawyer before any property transaction',
+                'Keep original documents safely — make certified copies',
+                'Approach civil court or Revenue court depending on the nature of dispute',
+            ],
+            'note': 'Property disputes can be complex and time-consuming. Always get documents verified by a qualified property lawyer before making any transaction. For builder disputes, approach your State RERA authority.'
+        }
+    },
+    'family_law': {
+        'title': 'Family Law',
+        'icon': '👨‍👩‍👧',
+        'description': 'Understand marriage, divorce, child custody, and inheritance laws.',
+        'content': {
+            'overview': 'Family law in India is largely governed by personal laws based on religion — Hindu Marriage Act, 1955, Muslim Personal Law, Indian Christian Marriage Act. The Special Marriage Act, 1954 applies to all religions and inter-religion marriages. The Protection of Women from Domestic Violence Act, 2005 is an important protective law.',
+            'common_types': [
+                'Divorce and judicial separation',
+                'Child custody and guardianship disputes',
+                'Maintenance and alimony',
+                'Domestic violence and abuse',
+                'Dowry harassment',
+                'Adoption and foster care',
+                'Succession and inheritance disputes',
+                'Property rights of women',
+            ],
+            'what_to_do': [
+                'Seek mediation or counselling before approaching court for matrimonial disputes',
+                'Document all instances of domestic violence with dates, photos, medical records',
+                'Approach the Protection Officer under Domestic Violence Act for immediate help',
+                'Contact National Women Helpline: 181 or Police: 112 for emergencies',
+                'Get a family law specialist lawyer for matrimonial and custody disputes',
+                'Approach Lok Adalat for faster resolution of settlement-possible matters',
+                'Know that women have rights to matrimonial home even without ownership',
+            ],
+            'note': 'Family law matters are sensitive and personal laws vary by religion. It is strongly advised to consult a qualified family law advocate for your specific situation. For domestic violence emergencies, contact police (112) immediately.'
+        }
+    },
+    'criminal_law': {
+        'title': 'Criminal Law',
+        'icon': '⚖️',
+        'description': 'Understand FIRs, bail, rights of the accused, and criminal procedure.',
+        'content': {
+            'overview': 'Criminal law in India is governed by the Bharatiya Nyaya Sanhita (BNS), 2023 (which replaced IPC), Bharatiya Nagarik Suraksha Sanhita (BNSS), 2023 (which replaced CrPC), and the Bharatiya Sakshya Adhiniyam (BSA), 2023 (which replaced the Evidence Act). These laws define offences, procedures, and rights.',
+            'common_types': [
+                'Filing and responding to FIRs',
+                'Bail applications (Regular bail, Anticipatory bail)',
+                'Cognizable vs non-cognizable offences',
+                'Rights of the arrested person',
+                'Warrant and summons proceedings',
+                'Appeals and revisions in criminal courts',
+                'Compoundable offences (that can be settled between parties)',
+            ],
+            'what_to_do': [
+                'If you are a victim: File FIR at the nearest police station immediately',
+                'If police refuse to register FIR: approach SP/SSP or file a complaint before Magistrate',
+                'If you are accused: exercise your right to remain silent and consult a lawyer immediately',
+                'You have the right to know the grounds of arrest',
+                'You must be produced before a Magistrate within 24 hours of arrest',
+                'Apply for bail as soon as possible through a criminal lawyer',
+                'Keep all evidence safe: witnesses, documents, CCTV footage',
+            ],
+            'note': 'Criminal matters are extremely serious. It is essential to consult a qualified criminal lawyer immediately if you are accused of any offence or if you are a victim of a serious crime. Do not make any statement without legal advice.'
+        }
+    },
+    'general_terms': {
+        'title': 'General Legal Terms',
+        'icon': '📚',
+        'description': 'Understand common legal terms used in courts and documents.',
+        'content': {
+            'overview': 'Legal language can be confusing. Understanding basic legal terms helps you navigate courts, legal documents, and understand your rights. Here are some commonly encountered legal terms explained in simple language.',
+            'common_types': [
+                'FIR (First Information Report) — The first complaint filed with police for a cognizable offence',
+                'Bail — Temporary release of an arrested person on surety/security',
+                'Affidavit — A written sworn statement of facts signed before a magistrate or notary',
+                'Injunction — A court order stopping someone from doing something',
+                'Caveat — A notice filed to ensure the other party is heard before any order is passed',
+                'Power of Attorney (PoA) — Legal authority given to someone to act on your behalf',
+                'Writ — A formal written court order (e.g., Habeas Corpus, Mandamus)',
+                'Suo Motu — When a court takes action on its own, without a party filing a petition',
+                'Contempt of Court — Disobeying or disrespecting a court\'s authority or orders',
+                'Lok Adalat — People\'s Court — a forum for alternative dispute resolution',
+            ],
+            'what_to_do': [
+                'Always ask your lawyer to explain legal terms in simple language',
+                'Never sign a document you do not fully understand',
+                'Free legal aid is available through the District Legal Services Authority (DLSA)',
+                'National Legal Services Authority (NALSA) provides free legal aid to eligible persons',
+                'Call NALSA Helpline: 15100 for free legal advice',
+            ],
+            'note': 'Every citizen has the right to free legal aid if they cannot afford a lawyer (under the Legal Services Authorities Act, 1987). Contact your nearest District Legal Services Authority (DLSA) for assistance.'
+        }
+    },
+}
 
-@app.before_request
-def protect_forms():
-    session.setdefault("csrf_token", secrets.token_urlsafe(32))
-    if request.method == "POST":
-        submitted = request.form.get("csrf_token", "")
-        if not secrets.compare_digest(submitted, session["csrf_token"]):
-            abort(400)
+# ── Routes — Public ───────────────────────────────────────────────────────────
 
-
-def extract_document_text(path, extension):
-    if extension in {"txt", "md"}:
-        return path.read_text(encoding="utf-8", errors="replace")
-    if extension == "pdf":
-        from pypdf import PdfReader
-        return "\n".join(page.extract_text() or "" for page in PdfReader(path).pages)
-    if extension == "docx":
-        from zipfile import ZipFile
-        from xml.etree import ElementTree
-        with ZipFile(path) as archive:
-            root = ElementTree.fromstring(archive.read("word/document.xml"))
-        return "\n".join(
-            "".join(node.itertext()) for node in root.iter()
-            if node.tag.endswith("}p")
-        )
-    raise ValueError("Unsupported document type")
-
-
-@app.route("/")
+@app.route('/')
 def index():
-    return render_template("index.html")
+    if 'user_id' in session:
+        return redirect(url_for('dashboard'))
+    return render_template('landing.html')
 
 
-@app.route("/register", methods=["GET", "POST"])
+@app.route('/landing')
+def landing():
+    return render_template('landing.html')
+
+
+@app.route('/register', methods=['GET', 'POST'])
 def register():
-    if request.method == "POST":
-        username = request.form.get("username", "").strip()
-        email = request.form.get("email", "").strip().lower()
-        password = request.form.get("password", "")
+    if 'user_id' in session:
+        return redirect(url_for('dashboard'))
+
+    if request.method == 'POST':
+        username = request.form.get('username', '').strip()
+        email = request.form.get('email', '').strip().lower()
+        password = request.form.get('password', '')
+        confirm_password = request.form.get('confirm_password', '')
+
         if not username or not email or not password:
-            flash("Please complete every field.", "error")
-        elif len(username) > 40 or len(email) > 254 or "@" not in email:
-            flash("Please enter a valid username and email address.", "error")
-        elif password != request.form.get("confirmation", ""):
-            flash("The passwords do not match.", "error")
-        elif len(password) < 8:
-            flash("Choose a password with at least 8 characters.", "error")
-        else:
-            db = get_db()
-            exists = db.execute(
-                "SELECT id FROM users WHERE username = ? OR email = ?", (username, email)
-            ).fetchone()
-            if exists:
-                db.close()
-                flash("That username or email is already registered.", "error")
-            else:
-                db.execute(
-                    "INSERT INTO users (username, email, password_hash) VALUES (?, ?, ?)",
-                    (username, email, generate_password_hash(password)),
-                )
-                db.commit()
-                db.close()
-                flash("Account created. Please log in.", "success")
-                return redirect(url_for("login"))
-        return redirect(url_for("register"))
-    return render_template("register.html")
+            flash('All fields are required.', 'error')
+            return redirect(url_for('register'))
+
+        if len(username) < 3:
+            flash('Username must be at least 3 characters.', 'error')
+            return redirect(url_for('register'))
+
+        if len(password) < 6:
+            flash('Password must be at least 6 characters.', 'error')
+            return redirect(url_for('register'))
+
+        if password != confirm_password:
+            flash('Passwords do not match.', 'error')
+            return redirect(url_for('register'))
+
+        if get_user_by_username(username):
+            flash('Username already taken. Please choose another.', 'error')
+            return redirect(url_for('register'))
+
+        if get_user_by_email(email):
+            flash('Email already registered. Please login.', 'error')
+            return redirect(url_for('register'))
+
+        password_hash = generate_password_hash(password)
+        create_user(username, email, password_hash)
+        flash('Registration successful! Please log in.', 'success')
+        return redirect(url_for('login'))
+
+    return render_template('register.html')
 
 
-@app.route("/login", methods=["GET", "POST"])
+@app.route('/login', methods=['GET', 'POST'])
 def login():
-    if request.method == "POST":
-        email = request.form.get("email", "").strip().lower()
-        password = request.form.get("password", "")
-        db = get_db()
-        user = db.execute("SELECT * FROM users WHERE email = ?", (email,)).fetchone()
-        db.close()
-        if user is None or not check_password_hash(user["password_hash"], password):
-            flash("Email or password was not recognized.", "error")
-            return redirect(url_for("login"))
-        session.clear()
-        session["user_id"] = user["id"]
-        return redirect(url_for("dashboard"))
-    return render_template("login.html")
+    if 'user_id' in session:
+        return redirect(url_for('dashboard'))
+
+    if request.method == 'POST':
+        username = request.form.get('username', '').strip()
+        password = request.form.get('password', '')
+
+        if not username or not password:
+            flash('Username and password are required.', 'error')
+            return redirect(url_for('login'))
+
+        user = get_user_by_username(username)
+        if user and check_password_hash(user['password_hash'], password):
+            session['user_id'] = user['id']
+            session['username'] = user['username']
+            return redirect(url_for('dashboard'))
+
+        flash('Invalid username or password.', 'error')
+    return render_template('login.html')
 
 
-@app.route("/logout", methods=["POST"])
+@app.route('/logout')
 def logout():
     session.clear()
-    flash("You have been logged out.", "success")
-    return redirect(url_for("index"))
+    flash('You have been logged out.', 'success')
+    return redirect(url_for('login'))
 
 
-@app.route("/dashboard")
+# ── Routes — Protected ────────────────────────────────────────────────────────
+
+@app.route('/dashboard')
+@login_required
 def dashboard():
-    denied = login_required()
-    if denied:
-        return denied
-    user = current_user()
-    db = get_db()
-    history = db.execute(
-        "SELECT id, title, updated_at FROM conversations WHERE user_id = ? ORDER BY updated_at DESC LIMIT 5",
-        (user["id"],),
-    ).fetchall()
-    db.close()
-    return render_template("dashboard.html", user=user, history=history)
+    user_id = session['user_id']
+    conv_count = get_conversation_count(user_id)
+    doc_count = get_document_count(user_id)
+    recent_convs = get_conversations_by_user(user_id)[:5]
+    recent_docs = get_documents_by_user(user_id)[:3]
+    return render_template('dashboard.html',
+                           conv_count=conv_count,
+                           doc_count=doc_count,
+                           recent_convs=recent_convs,
+                           recent_docs=recent_docs)
 
 
-@app.route("/chat", methods=["GET", "POST"])
+@app.route('/chat')
+@login_required
 def chat():
-    denied = login_required()
-    if denied:
-        return denied
-    user = current_user()
-    db = get_db()
-    error_message = None
-    conversation_id = request.args.get("conversation", type=int)
-
-    if request.method == "POST":
-        message = request.form.get("message", "").strip()
-        conversation_id = request.form.get("conversation_id", type=int)
-        if not message:
-            flash("Type a question before sending it.", "error")
-            db.close()
-            return redirect(url_for("chat", conversation=conversation_id) if conversation_id else url_for("chat"))
-        if len(message) > 2000:
-            message = message[:2000]
-        conversation = None
-        if conversation_id:
-            conversation = db.execute(
-                "SELECT id FROM conversations WHERE id = ? AND user_id = ?",
-                (conversation_id, user["id"]),
-            ).fetchone()
-            if conversation is None:
-                db.close()
-                abort(404)
-        else:
-            title = " ".join(message.split())[:60]
-            cursor = db.execute(
-                "INSERT INTO conversations (user_id, title) VALUES (?, ?)",
-                (user["id"], title or "New conversation"),
-            )
-            conversation_id = cursor.lastrowid
-        db.execute(
-            "INSERT INTO messages (conversation_id, role, content) VALUES (?, 'user', ?)",
-            (conversation_id, message),
-        )
-        db.execute("UPDATE conversations SET updated_at = CURRENT_TIMESTAMP WHERE id = ?", (conversation_id,))
-        db.commit()
-        prior = db.execute(
-            "SELECT role, content FROM messages WHERE conversation_id = ? ORDER BY id DESC LIMIT 12",
-            (conversation_id,),
-        ).fetchall()
-        prompt = "\n\n".join(f"{item['role'].title()}: {item['content']}" for item in reversed(prior))
-        try:
-            answer = get_legal_response(prompt)
-            db.execute(
-                "INSERT INTO messages (conversation_id, role, content) VALUES (?, 'assistant', ?)",
-                (conversation_id, answer),
-            )
-            db.execute("UPDATE conversations SET updated_at = CURRENT_TIMESTAMP WHERE id = ?", (conversation_id,))
-            db.commit()
-        except Exception as error:
-            detail = str(error)
-            if GEMINI_API_KEY:
-                detail = detail.replace(GEMINI_API_KEY, "[REDACTED]")
-            logger.error("Gemini request failed (%s): %s", type(error).__name__, detail)
-            error_message = "NyayaAI could not connect to the AI service right now. Please try again later."
-        return redirect(url_for("chat", conversation=conversation_id, error="service" if error_message else None))
-
-    conversation = None
-    messages = []
-    if conversation_id:
-        conversation = db.execute(
-            "SELECT id, title FROM conversations WHERE id = ? AND user_id = ?",
-            (conversation_id, user["id"]),
-        ).fetchone()
-        if conversation is None:
-            db.close()
-            abort(404)
-        messages = db.execute(
-            "SELECT role, content, created_at FROM messages WHERE conversation_id = ? ORDER BY id",
-            (conversation_id,),
-        ).fetchall()
-    if request.args.get("error") == "service":
-        error_message = "NyayaAI could not connect to the AI service right now. Please try again later."
-    conversations = db.execute(
-        "SELECT id, title FROM conversations WHERE user_id = ? ORDER BY updated_at DESC LIMIT 12",
-        (user["id"],),
-    ).fetchall()
-    db.close()
-    return render_template("chat.html", conversation=conversation, messages=messages,
-                           conversations=conversations, error_message=error_message)
+    return render_template('chat.html', conversation_id=None, messages=[])
 
 
-@app.post("/history/<int:conversation_id>/delete")
-def delete_conversation(conversation_id):
-    denied = login_required()
-    if denied:
-        return denied
-    db = get_db()
-    db.execute("DELETE FROM conversations WHERE id = ? AND user_id = ?", (conversation_id, session["user_id"]))
-    db.commit()
-    db.close()
-    flash("Conversation deleted.", "success")
-    return redirect(url_for("history"))
+@app.route('/chat/<int:conv_id>')
+@login_required
+def chat_conversation(conv_id):
+    user_id = session['user_id']
+    conv = get_conversation_by_id(conv_id, user_id)
+    if not conv:
+        flash('Conversation not found.', 'error')
+        return redirect(url_for('history'))
+    messages = get_messages_by_conversation(conv_id, user_id)
+    return render_template('chat.html', conversation_id=conv_id, messages=messages)
 
 
-@app.route("/history")
+# ── API — Chat ────────────────────────────────────────────────────────────────
+
+@app.route('/api/chat', methods=['POST'])
+@login_required
+def api_chat():
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({'error': 'Invalid request.'}), 400
+
+    message_text = (data.get('message') or '').strip()
+    conversation_id = data.get('conversation_id')
+    user_id = session['user_id']
+
+    if not message_text:
+        return jsonify({'error': 'Message cannot be empty.'}), 400
+
+    if len(message_text) > 4000:
+        return jsonify({'error': 'Message is too long. Please keep it under 4000 characters.'}), 400
+
+    # Get or create conversation
+    if not conversation_id:
+        title = message_text[:60] + ('…' if len(message_text) > 60 else '')
+        conversation_id = create_conversation(user_id, title)
+    else:
+        conv = get_conversation_by_id(conversation_id, user_id)
+        if not conv:
+            return jsonify({'error': 'Conversation not found.'}), 404
+
+    # Save user message
+    add_message(conversation_id, 'user', message_text)
+
+    # Build history for context (up to last 10 messages, excluding the one just added)
+    all_msgs = get_messages_by_conversation(conversation_id, user_id)
+    context_history = [dict(m) for m in all_msgs][:-1][-10:]
+
+    # Get AI response
+    response_text, error = get_ai_response(message_text, context_history)
+
+    if error:
+        return jsonify({'error': error}), 503
+
+    # Save assistant message
+    add_message(conversation_id, 'assistant', response_text)
+
+    return jsonify({
+        'response': response_text,
+        'conversation_id': conversation_id
+    })
+
+
+@app.route('/api/conversations')
+@login_required
+def api_conversations():
+    convs = get_conversations_by_user(session['user_id'])
+    return jsonify({'conversations': [dict(c) for c in convs]})
+
+
+# ── Routes — History ──────────────────────────────────────────────────────────
+
+@app.route('/history')
+@login_required
 def history():
-    denied = login_required()
-    if denied:
-        return denied
-    db = get_db()
-    conversations = db.execute(
-        "SELECT c.id, c.title, c.created_at, c.updated_at, COUNT(m.id) AS message_count "
-        "FROM conversations c LEFT JOIN messages m ON c.id = m.conversation_id "
-        "WHERE c.user_id = ? GROUP BY c.id ORDER BY c.updated_at DESC",
-        (session["user_id"],),
-    ).fetchall()
-    db.close()
-    return render_template("history.html", conversations=conversations)
+    convs = get_conversations_by_user(session['user_id'])
+    return render_template('history.html', conversations=convs)
 
 
-@app.route("/documents", methods=["GET", "POST"])
+@app.route('/api/conversation/delete/<int:conv_id>', methods=['POST'])
+@login_required
+def delete_conv(conv_id):
+    if delete_conversation(conv_id, session['user_id']):
+        return jsonify({'success': True})
+    return jsonify({'error': 'Failed to delete conversation.'}), 400
+
+
+# ── Routes — Documents ────────────────────────────────────────────────────────
+
+@app.route('/documents')
+@login_required
 def documents():
-    denied = login_required()
-    if denied:
-        return denied
-    user = current_user()
-    db = get_db()
-    selected = request.args.get("id", type=int)
-    if request.method == "POST":
-        upload = request.files.get("document")
-        if upload is None or not upload.filename:
-            flash("Choose a file to upload.", "error")
-            db.close()
-            return redirect(url_for("documents"))
-        safe_name = secure_filename(upload.filename)
-        extension = Path(safe_name).suffix.lower().lstrip(".")
-        if extension not in ALLOWED_EXTENSIONS:
-            flash("Upload a PDF, DOCX, TXT, or Markdown file.", "error")
-            db.close()
-            return redirect(url_for("documents"))
-        user_dir = UPLOAD_DIR / str(user["id"])
-        user_dir.mkdir(parents=True, exist_ok=True)
-        stored_path = user_dir / f"{uuid.uuid4().hex}.{extension}"
-        upload.save(stored_path)
-        try:
-            extracted = extract_document_text(stored_path, extension)[:100000]
-        except Exception as error:
-            logger.warning("Document extraction failed (%s)", type(error).__name__)
-            stored_path.unlink(missing_ok=True)
-            flash("We could not read this file. Check that it is a valid, text-based document.", "error")
-            db.close()
-            return redirect(url_for("documents"))
-        if not extracted.strip():
-            stored_path.unlink(missing_ok=True)
-            flash("No readable text was found in this document.", "error")
-            db.close()
-            return redirect(url_for("documents"))
-        cursor = db.execute(
-            "INSERT INTO documents (user_id, original_name, stored_name, extracted_text) VALUES (?, ?, ?, ?)",
-            (user["id"], safe_name[:255], str(stored_path.relative_to(BASE_DIR)), extracted),
-        )
-        db.commit()
-        db.close()
-        flash("Document uploaded and text extracted.", "success")
-        return redirect(url_for("documents", id=cursor.lastrowid))
-    rows = db.execute(
-        "SELECT id, original_name, created_at FROM documents WHERE user_id = ? ORDER BY created_at DESC",
-        (user["id"],),
-    ).fetchall()
-    document = None
-    if selected:
-        document = db.execute(
-            "SELECT id, original_name, extracted_text, analysis FROM documents WHERE id = ? AND user_id = ?",
-            (selected, user["id"]),
-        ).fetchone()
-        if document is None:
-            db.close()
-            abort(404)
-    db.close()
-    return render_template("documents.html", documents=rows, document=document)
+    docs = get_documents_by_user(session['user_id'])
+    return render_template('documents.html', documents=docs)
 
 
-@app.post("/documents/<int:document_id>/analyze")
-def analyze_document(document_id):
-    denied = login_required()
-    if denied:
-        return denied
-    db = get_db()
-    document = db.execute(
-        "SELECT extracted_text FROM documents WHERE id = ? AND user_id = ?",
-        (document_id, session["user_id"]),
-    ).fetchone()
-    if document is None:
-        db.close()
-        abort(404)
+@app.route('/documents/upload', methods=['POST'])
+@login_required
+def upload_document():
+    if 'file' not in request.files:
+        flash('No file selected.', 'error')
+        return redirect(url_for('documents'))
+
+    file = request.files['file']
+    if not file or file.filename == '':
+        flash('No file selected.', 'error')
+        return redirect(url_for('documents'))
+
+    if not allowed_file(file.filename):
+        flash('Invalid file type. Allowed: PDF, DOCX, TXT, MD.', 'error')
+        return redirect(url_for('documents'))
+
+    filepath = None
     try:
-        analysis = analyze_legal_document(document["extracted_text"])
-        db.execute("UPDATE documents SET analysis = ? WHERE id = ?", (analysis, document_id))
-        db.commit()
-        flash("Document analysis is ready.", "success")
-    except Exception as error:
-        detail = str(error)
-        if GEMINI_API_KEY:
-            detail = detail.replace(GEMINI_API_KEY, "[REDACTED]")
-        logger.error("Gemini document analysis failed (%s): %s", type(error).__name__, detail)
-        flash("NyayaAI could not connect to the AI service right now. Please try again later.", "error")
-    db.close()
-    return redirect(url_for("documents", id=document_id))
+        filepath, filename = save_uploaded_file(file)
+        original_name = file.filename
+        file_ext = get_file_extension(filename)
+
+        extracted_text, error = extract_text(filepath, filename)
+
+        if error:
+            flash(f'Could not extract text: {error}', 'error')
+            return redirect(url_for('documents'))
+
+        doc_id = save_document(
+            user_id=session['user_id'],
+            filename=filename,
+            original_filename=original_name,
+            file_type=file_ext,
+            extracted_text=extracted_text
+        )
+
+        flash('Document uploaded and text extracted successfully.', 'success')
+        return redirect(url_for('document_view', doc_id=doc_id))
+
+    except Exception:
+        flash('An error occurred while processing the file.', 'error')
+        return redirect(url_for('documents'))
+    finally:
+        if filepath:
+            cleanup_file(filepath)
 
 
-@app.route("/library")
-def library():
-    return render_template("library.html", topics=[
-        ("Consumer Rights", "Understand common questions about purchases, warranties, and complaint processes."),
-        ("Cyber Crime", "Learn general digital safety steps and how online incidents may be reported."),
-        ("Property", "Explore general concepts around tenancy, ownership records, and property disputes."),
-        ("Employment", "Review broad workplace topics such as pay, leave, contracts, and grievance processes."),
-        ("Family Law", "Find introductory information about family matters and where to seek support."),
-        ("Criminal Law", "Read general information about procedure, reporting, and seeking legal help."),
-        ("Civil Law", "Explore common civil dispute concepts and possible resolution routes."),
-        ("Digital Safety", "Practical steps for protecting accounts, evidence, and personal information."),
-    ])
+@app.route('/document/<int:doc_id>')
+@login_required
+def document_view(doc_id):
+    doc = get_document_by_id(doc_id, session['user_id'])
+    if not doc:
+        flash('Document not found.', 'error')
+        return redirect(url_for('documents'))
+    return render_template('document_view.html', doc=doc)
 
 
-@app.route("/profile", methods=["GET", "POST"])
+@app.route('/api/document/<int:doc_id>/analyze', methods=['POST'])
+@login_required
+def api_analyze_document(doc_id):
+    doc = get_document_by_id(doc_id, session['user_id'])
+    if not doc:
+        return jsonify({'error': 'Document not found.'}), 404
+
+    data = request.get_json(silent=True) or {}
+    analysis_type = data.get('type', 'full')
+
+    if not doc['extracted_text']:
+        return jsonify({'error': 'No text available to analyze.'}), 400
+
+    result, error = analyze_document(doc['extracted_text'], analysis_type)
+    if error:
+        return jsonify({'error': error}), 503
+
+    if isinstance(result, dict):
+        return jsonify({'result': result, 'type': 'full'})
+    else:
+        return jsonify({'result': result, 'type': analysis_type})
+
+
+@app.route('/api/document/<int:doc_id>/delete', methods=['POST'])
+@login_required
+def api_delete_document(doc_id):
+    if delete_document(doc_id, session['user_id']):
+        return jsonify({'success': True})
+    return jsonify({'error': 'Failed to delete document.'}), 400
+
+
+# ── Routes — Legal Library ────────────────────────────────────────────────────
+
+@app.route('/legal-library')
+@login_required
+def legal_library():
+    return render_template('legal_library.html', topics=LEGAL_TOPICS, selected_topic=None)
+
+
+@app.route('/legal-library/<topic>')
+@login_required
+def legal_topic(topic):
+    if topic not in LEGAL_TOPICS:
+        flash('Topic not found.', 'error')
+        return redirect(url_for('legal_library'))
+    return render_template('legal_library.html', topics=LEGAL_TOPICS, selected_topic=topic)
+
+
+# ── Routes — Profile ──────────────────────────────────────────────────────────
+
+@app.route('/profile', methods=['GET', 'POST'])
+@login_required
 def profile():
-    denied = login_required()
-    if denied:
-        return denied
-    user = current_user()
-    if request.method == "POST":
-        username = request.form.get("username", "").strip()
-        email = request.form.get("email", "").strip().lower()
-        if not username or len(username) > 40 or "@" not in email or len(email) > 254:
-            flash("Enter a valid username and email address.", "error")
+    user = get_user_by_id(session['user_id'])
+
+    if request.method == 'POST':
+        username = request.form.get('username', '').strip()
+        email = request.form.get('email', '').strip().lower()
+
+        if not username or not email:
+            flash('Username and email are required.', 'error')
+        elif len(username) < 3:
+            flash('Username must be at least 3 characters.', 'error')
         else:
-            db = get_db()
-            duplicate = db.execute(
-                "SELECT id FROM users WHERE (username = ? OR email = ?) AND id != ?",
-                (username, email, user["id"]),
-            ).fetchone()
-            if duplicate:
-                flash("That username or email is already in use.", "error")
+            existing_u = get_user_by_username(username)
+            if existing_u and existing_u['id'] != user['id']:
+                flash('Username already taken.', 'error')
             else:
-                db.execute("UPDATE users SET username = ?, email = ? WHERE id = ?", (username, email, user["id"]))
-                db.commit()
-                flash("Profile updated.", "success")
-            db.close()
-        return redirect(url_for("profile"))
-    return render_template("profile.html", user=user)
+                existing_e = get_user_by_email(email)
+                if existing_e and existing_e['id'] != user['id']:
+                    flash('Email already registered.', 'error')
+                else:
+                    update_user(user['id'], username, email)
+                    session['username'] = username
+                    flash('Profile updated successfully.', 'success')
+                    user = get_user_by_id(session['user_id'])
+
+    conv_count = get_conversation_count(session['user_id'])
+    doc_count = get_document_count(session['user_id'])
+    return render_template('profile.html', user=user,
+                           conv_count=conv_count, doc_count=doc_count)
 
 
-@app.route("/documents/<int:document_id>/download")
-def download_document(document_id):
-    denied = login_required()
-    if denied:
-        return denied
-    db = get_db()
-    row = db.execute(
-        "SELECT original_name, stored_name FROM documents WHERE id = ? AND user_id = ?",
-        (document_id, session["user_id"]),
-    ).fetchone()
-    db.close()
-    if row is None:
-        abort(404)
-    path = (BASE_DIR / row["stored_name"]).resolve()
-    if UPLOAD_DIR.resolve() not in path.parents or not path.is_file():
-        abort(404)
-    return send_file(path, as_attachment=True, download_name=row["original_name"])
-
+# ── Error Handlers ────────────────────────────────────────────────────────────
 
 @app.errorhandler(404)
-def not_found(_error):
-    return render_template("error.html", code=404, title="Page not found",
-                           message="We could not find that page or item."), 404
-
-
-@app.errorhandler(400)
-def bad_request(_error):
-    return render_template("error.html", code=400, title="Request could not be verified",
-                           message="Refresh the page and try again."), 400
+def page_not_found(e):
+    return render_template('404.html'), 404
 
 
 @app.errorhandler(413)
-def upload_too_large(_error):
-    return render_template("error.html", code=413, title="File is too large",
-                           message="Choose a document smaller than 5 MB and try again."), 413
+def file_too_large(e):
+    flash('File too large. Maximum upload size is 10MB.', 'error')
+    return redirect(url_for('documents'))
+
+
+@app.errorhandler(403)
+def forbidden(e):
+    return render_template('500.html', error="403 Forbidden — Access Denied"), 403
 
 
 @app.errorhandler(500)
-def server_error(error):
-    logger.error("Application error: %s", type(error).__name__)
-    return render_template("error.html", code=500, title="Something went wrong",
-                           message="Please try again in a moment."), 500
+def internal_server_error(e):
+    return render_template('500.html', error="An internal server error occurred."), 500
 
 
-if __name__ == "__main__":
-    app.run(debug=False)
+if __name__ == '__main__':
+    app.run(debug=True, port=5000)
