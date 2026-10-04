@@ -1,0 +1,19 @@
+{% extends "layout.html" %}
+{% block title %}500 — Server Error{% endblock %}
+
+{% block content %}
+<div class="error-page-wrapper">
+    <div class="error-page-card">
+        <div class="error-badge">500</div>
+        <h1 class="error-title">Server Error</h1>
+        <p class="error-description">{{ error or 'An unexpected error occurred while processing your request. Please try again in a moment.' }}</p>
+        <div class="error-actions">
+            {% if session.get('user_id') %}
+            <a href="{{ url_for('dashboard') }}" class="btn btn-primary">Go to Dashboard</a>
+            {% else %}
+            <a href="{{ url_for('landing') }}" class="btn btn-primary">Return Home</a>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,152 @@
+{% extends "layout.html" %}
+{% block title %}NyayaAI — AI Legal Assistance & Document Intelligence{% endblock %}
+
+{% block content %}
+<div class="landing-page">
+    <!-- Hero Section -->
+    <section class="hero-section">
+        <div class="hero-badge">
+            <span class="badge-dot"></span>
+            AI-Powered Legal Information for India
+        </div>
+        <h1 class="hero-title">
+            Understand Legal Information.<br>
+            <span class="hero-highlight">Simply.</span>
+        </h1>
+        <p class="hero-subtitle">
+            Get clear, AI-powered explanations of general legal information, documents, and common legal concepts.
+        </p>
+
+        <div class="hero-actions">
+            {% if session.get('user_id') %}
+            <a href="{{ url_for('chat') }}" class="btn btn-primary btn-lg">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                </svg>
+                Start a New Chat
+            </a>
+            <a href="{{ url_for('dashboard') }}" class="btn btn-secondary btn-lg">
+                Go to Dashboard
+            </a>
+            {% else %}
+            <a href="{{ url_for('register') }}" class="btn btn-primary btn-lg">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                </svg>
+                Start a New Chat
+            </a>
+            <a href="{{ url_for('legal_library') }}" class="btn btn-secondary btn-lg">
+                Explore Legal Library
+            </a>
+            {% endif %}
+        </div>
+
+        <p class="hero-disclaimer">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10"></circle>
+                <line x1="12" y1="16" x2="12" y2="12"></line>
+                <line x1="12" y1="8" x2="12.01" y2="8"></line>
+            </svg>
+            NyayaAI provides general legal information and does not replace professional legal advice.
+        </p>
+    </section>
+
+    <!-- Features Section -->
+    <section class="landing-section">
+        <div class="section-label">Capabilities</div>
+        <h2 class="section-title">Designed for clarity and legal confidence</h2>
+        <p class="section-subtitle">Practical tools to help you demystify contracts, notices, and procedural rights.</p>
+
+        <div class="features-grid">
+            <div class="feature-card">
+                <div class="feature-icon">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                    </svg>
+                </div>
+                <h3>AI Legal Chat</h3>
+                <p>Ask legal questions in plain English, Hindi, or Hinglish. Get structured explanations covering civil, criminal, and corporate topics.</p>
+            </div>
+
+            <div class="feature-card">
+                <div class="feature-icon">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                        <polyline points="14 2 14 8 20 8"></polyline>
+                        <line x1="16" y1="13" x2="8" y2="13"></line>
+                        <line x1="16" y1="17" x2="8" y2="17"></line>
+                        <polyline points="10 9 9 9 8 9"></polyline>
+                    </svg>
+                </div>
+                <h3>Document Intelligence</h3>
+                <p>Upload agreements, legal notices, and contracts. Automatically extract key clauses, identify critical dates, and highlight potential risks.</p>
+            </div>
+
+            <div class="feature-card">
+                <div class="feature-icon">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <polyline points="12 6 12 12 16 14"></polyline>
+                    </svg>
+                </div>
+                <h3>Conversation History</h3>
+                <p>Every conversation is securely cataloged. Revisit past legal advice, search through previous topics, and continue where you left off.</p>
+            </div>
+
+            <div class="feature-card">
+                <div class="feature-icon">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
+                        <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
+                    </svg>
+                </div>
+                <h3>Legal Library</h3>
+                <p>Browse structured summaries of Indian laws, consumer rights, employment protections, cyber crime laws, and essential court terms.</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- How It Works Section -->
+    <section class="landing-section how-it-works-section">
+        <div class="section-label">Workflow</div>
+        <h2 class="section-title">How NyayaAI Works</h2>
+        <p class="section-subtitle">Three simple steps to clarify your legal doubts.</p>
+
+        <div class="steps-grid">
+            <div class="step-card">
+                <div class="step-badge">1</div>
+                <h3>Ask a question</h3>
+                <p>Describe your situation, inquiry, or upload a legal document you need help reviewing.</p>
+            </div>
+            <div class="step-connector"></div>
+            <div class="step-card">
+                <div class="step-badge">2</div>
+                <h3>Get an explanation</h3>
+                <p>Receive clear, plain-language breakdowns of laws, rights, obligations, and next steps.</p>
+            </div>
+            <div class="step-connector"></div>
+            <div class="step-card">
+                <div class="step-badge">3</div>
+                <h3>Review and save</h3>
+                <p>Access your saved chats, copy takeaways, and prepare educated questions for your lawyer.</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- Bottom Callout -->
+    <section class="landing-cta-banner">
+        <div class="cta-banner-content">
+            <h2>Ready to clarify your legal questions?</h2>
+            <p>Experience fast, objective legal information assistance powered by Groq AI.</p>
+            <div class="cta-banner-actions">
+                {% if session.get('user_id') %}
+                <a href="{{ url_for('chat') }}" class="btn btn-primary btn-lg">Open NyayaAI Chat</a>
+                {% else %}
+                <a href="{{ url_for('register') }}" class="btn btn-primary btn-lg">Create Free Account</a>
+                <a href="{{ url_for('login') }}" class="btn btn-secondary btn-lg">Sign In</a>
+                {% endif %}
+            </div>
+        </div>
+    </section>
+</div>
+{% endblock %}

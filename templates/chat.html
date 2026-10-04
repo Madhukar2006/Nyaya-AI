@@ -1,0 +1,209 @@
+{% extends "layout.html" %}
+{% block title %}AI Legal Chat{% endblock %}
+
+{% block content %}
+<div class="chat-workspace">
+    <!-- Inner Chat History Drawer/Sidebar -->
+    <aside class="chat-history-sidebar" id="chat-history-sidebar">
+        <div class="chat-history-header">
+            <span class="chat-history-title">Conversations</span>
+            <button type="button" class="btn btn-secondary btn-sm" id="new-chat-btn" title="Start a fresh conversation">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="12" y1="5" x2="12" y2="19"></line>
+                    <line x1="5" y1="12" x2="19" y2="12"></line>
+                </svg>
+                <span>New</span>
+            </button>
+        </div>
+
+        <div class="chat-history-list" id="sidebar-conv-list">
+            <div class="sidebar-loading-state" id="sidebar-loading">
+                <div class="spinner-sm"></div>
+                <span>Loading chats…</span>
+            </div>
+        </div>
+
+        <div class="chat-history-footer">
+            <a href="{{ url_for('history') }}" class="chat-history-viewall">
+                <span>View all history</span>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="9 18 15 12 9 6"></polyline>
+                </svg>
+            </a>
+        </div>
+    </aside>
+
+    <!-- Main Chat Workspace -->
+    <div class="chat-main-area">
+        <!-- Chat Header Bar -->
+        <header class="chat-header-bar">
+            <div class="chat-header-left">
+                <button type="button" class="btn-toggle-conv-drawer" id="toggle-conv-drawer" title="Toggle history sidebar" aria-label="Toggle history">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="3" y1="12" x2="21" y2="12"></line>
+                        <line x1="3" y1="6" x2="21" y2="6"></line>
+                        <line x1="3" y1="18" x2="21" y2="18"></line>
+                    </svg>
+                </button>
+                <div class="chat-header-info">
+                    <h1 class="chat-agent-title">NyayaAI</h1>
+                    <span class="chat-agent-badge">AI Legal Assistant</span>
+                </div>
+            </div>
+
+            <div class="chat-header-right">
+                <div class="chat-status-pill">
+                    <span class="status-dot"></span>
+                    <span class="status-label">Ready to help</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- Messages Scroll Container -->
+        <div class="chat-messages-container" id="messages-area">
+            <!-- Empty State (Shown when no messages) -->
+            {% if messages %}
+            <div class="chat-empty-state is-hidden" id="welcome-screen">
+            {% else %}
+            <div class="chat-empty-state" id="welcome-screen">
+            {% endif %}
+                <div class="empty-state-badge">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="12" y1="3" x2="12" y2="21"></line>
+                        <path d="M4 7l8-4 8 4"></path>
+                        <path d="M4 11a4 4 0 0 0 8 0"></path>
+                        <path d="M12 11a4 4 0 0 0 8 0"></path>
+                        <line x1="6" y1="18" x2="18" y2="18"></line>
+                    </svg>
+                </div>
+                <h2 class="empty-state-title">How can I help you today?</h2>
+                <p class="empty-state-subtitle">Ask about a legal concept, document, notice, contract, or general legal question.</p>
+
+                <!-- Clickable Suggestion Chips -->
+                <div class="suggestion-chips-wrapper">
+                    <button type="button" class="suggestion-chip" data-prompt="Explain what a legal term means: What is an Affidavit and when is it required?">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"></path></svg>
+                        <span>Explain a legal term</span>
+                    </button>
+                    <button type="button" class="suggestion-chip" data-prompt="Help me understand a legal notice: What should I do if I receive a demand or eviction notice?">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
+                        <span>Help me understand a notice</span>
+                    </button>
+                    <button type="button" class="suggestion-chip" data-prompt="Explain a contract: What makes a non-disclosure or service contract legally valid in India?">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                        <span>Explain a contract</span>
+                    </button>
+                    <button type="button" class="suggestion-chip" data-prompt="What are my basic legal options if a company refuses to refund or provide a paid service?">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
+                        <span>What are my basic legal options?</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Existing or dynamically added messages -->
+            {% if messages %}
+                {% for msg in messages %}
+                <div class="message-wrapper message-{{ msg.role }}" id="msg-row-{{ loop.index }}">
+                    {% if msg.role == 'assistant' %}
+                    <div class="message-avatar-ai">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <line x1="12" y1="3" x2="12" y2="21"></line>
+                            <path d="M4 7l8-4 8 4"></path>
+                            <path d="M4 11a4 4 0 0 0 8 0"></path>
+                            <path d="M12 11a4 4 0 0 0 8 0"></path>
+                            <line x1="6" y1="18" x2="18" y2="18"></line>
+                        </svg>
+                    </div>
+                    {% endif %}
+
+                    <div class="message-bubble-container">
+                        <div class="message-bubble" id="msg-content-{{ loop.index }}">{{ msg.content }}</div>
+                        <div class="message-meta-bar">
+                            <span class="message-timestamp">{{ msg.created_at | datetimeformat('%I:%M %p') }}</span>
+                            {% if msg.role == 'assistant' %}
+                            <div class="message-actions">
+                                <button type="button" class="btn-msg-action btn-copy" data-target="msg-content-{{ loop.index }}" title="Copy answer">
+                                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                                    <span>Copy</span>
+                                </button>
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    {% if msg.role == 'user' %}
+                    <div class="message-avatar-user">
+                        {{ session.username[0]|upper }}
+                    </div>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            {% endif %}
+
+            <!-- Typing Indicator (While AI is generating) -->
+            <div class="message-wrapper message-assistant typing-wrapper" id="typing-indicator" style="display:none;">
+                <div class="message-avatar-ai">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="12" y1="3" x2="12" y2="21"></line>
+                        <path d="M4 7l8-4 8 4"></path>
+                        <path d="M4 11a4 4 0 0 0 8 0"></path>
+                        <path d="M12 11a4 4 0 0 0 8 0"></path>
+                        <line x1="6" y1="18" x2="18" y2="18"></line>
+                    </svg>
+                </div>
+                <div class="message-bubble-container">
+                    <div class="message-bubble typing-bubble">
+                        <div class="typing-dots">
+                            <span class="dot"></span>
+                            <span class="dot"></span>
+                            <span class="dot"></span>
+                        </div>
+                        <span class="typing-text">NyayaAI is thinking…</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Chat Bottom Composer Area -->
+        <div class="chat-composer-section">
+            <div class="chat-composer-box">
+                <!-- Attachment Button (Redirects to Documents workspace) -->
+                <a href="{{ url_for('documents') }}" class="btn-composer-attach" title="Upload document for analysis" aria-label="Upload document">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path>
+                    </svg>
+                </a>
+
+                <!-- Auto-expanding Textarea -->
+                <textarea id="message-input" class="composer-textarea"
+                          placeholder="Ask NyayaAI anything… (Enter to send, Shift+Enter for new line)"
+                          rows="1" maxlength="4000"></textarea>
+
+                <!-- Send Button -->
+                <button type="button" id="send-btn" class="btn-composer-send" title="Send query" aria-label="Send message">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="22" y1="2" x2="11" y2="13"></line>
+                        <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+                    </svg>
+                </button>
+            </div>
+
+            <!-- Composer Meta Footer -->
+            <div class="composer-footer-bar">
+                <span class="composer-disclaimer">
+                    Important: NyayaAI provides general legal information and is not a substitute for professional legal advice.
+                </span>
+                <span id="char-counter" class="composer-char-count">0 / 4000</span>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<div id="chat-metadata"
+     data-conv-id="{{ conversation_id or '' }}"
+     data-username="{{ session.username or '' }}"
+     style="display: none;"></div>
+<script src="{{ url_for('static', filename='js/chat.js') }}"></script>
+{% endblock %}

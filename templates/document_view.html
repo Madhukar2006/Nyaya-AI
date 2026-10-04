@@ -1,0 +1,212 @@
+{% extends "layout.html" %}
+{% block title %}{{ doc.original_filename }}{% endblock %}
+
+{% block content %}
+<div class="content-container">
+    <!-- Breadcrumb / Header -->
+    <div class="page-top-header">
+        <div>
+            <a href="{{ url_for('documents') }}" class="back-nav-link">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="19" y1="12" x2="5" y2="12"></line>
+                    <polyline points="12 19 5 12 12 5"></polyline>
+                </svg>
+                <span>Back to Documents</span>
+            </a>
+            <h1 class="page-main-heading mt-2">{{ doc.original_filename }}</h1>
+            <p class="page-subheading">
+                {{ doc.file_type | upper }} document &nbsp;•&nbsp; Uploaded on {{ doc.created_at | datetimeformat('%B %d, %Y') }}
+            </p>
+        </div>
+
+        <div class="header-action-group">
+            <button type="button" class="btn btn-secondary btn-sm" id="btn-copy-doc-text">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                </svg>
+                <span>Copy Extracted Text</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- Desktop Two-Column Layout -->
+    <div class="doc-view-layout">
+        <!-- Left Column: Document Information & Extracted Text -->
+        <div class="doc-view-left">
+            <!-- Metadata Card -->
+            <div class="card mb-4">
+                <div class="card-header-clean">
+                    <h2 class="card-heading-sm">Document Details</h2>
+                </div>
+                <div class="metadata-grid">
+                    <div class="metadata-item">
+                        <span class="meta-label">File Type</span>
+                        <span class="meta-value file-type-badge">{{ doc.file_type | upper }}</span>
+                    </div>
+                    <div class="metadata-item">
+                        <span class="meta-label">Length</span>
+                        <span class="meta-value">{{ (doc.extracted_text or '') | length }} characters</span>
+                    </div>
+                    <div class="metadata-item">
+                        <span class="meta-label">Uploaded</span>
+                        <span class="meta-value">{{ doc.created_at | datetimeformat('%b %d, %Y') }}</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Extracted Text Card -->
+            <div class="card">
+                <div class="card-header-clean space-between">
+                    <h2 class="card-heading-sm">Extracted Content</h2>
+                    <span class="text-muted text-xs">Raw Text</span>
+                </div>
+                <div class="extracted-text-viewer" id="extracted-raw-text">
+                    {{ doc.extracted_text or 'No text could be extracted from this document.' }}
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Column: AI Analysis Workspace -->
+        <div class="doc-view-right">
+            <div class="card analysis-workspace-card">
+                <div class="card-header-clean">
+                    <div>
+                        <h2 class="card-heading-sm">AI Document Intelligence</h2>
+                        <p class="card-subtext">Choose an analysis focus and run Groq AI to extract legal insights.</p>
+                    </div>
+                </div>
+
+                <!-- Analysis Mode Selector Pills -->
+                <div class="analysis-mode-selector">
+                    <button type="button" class="mode-pill active" data-type="full">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                        <span>Full Analysis</span>
+                    </button>
+                    <button type="button" class="mode-pill" data-type="summarize">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line></svg>
+                        <span>Summarize</span>
+                    </button>
+                    <button type="button" class="mode-pill" data-type="simple">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+                        <span>Explain (Simple)</span>
+                    </button>
+                    <button type="button" class="mode-pill" data-type="key_points">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
+                        <span>Important Points</span>
+                    </button>
+                    <button type="button" class="mode-pill" data-type="dates">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+                        <span>Important Dates</span>
+                    </button>
+                    <button type="button" class="mode-pill" data-type="legal_terms">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>
+                        <span>Legal Terms</span>
+                    </button>
+                </div>
+
+                <!-- Action Button -->
+                <div class="analysis-action-bar">
+                    {% if not doc.extracted_text %}
+                    <button type="button" class="btn btn-primary btn-lg" id="btn-run-analysis" disabled>
+                    {% else %}
+                    <button type="button" class="btn btn-primary btn-lg" id="btn-run-analysis">
+                    {% endif %}
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                        </svg>
+                        <span>Run AI Analysis</span>
+                    </button>
+                </div>
+
+                <!-- Loading State -->
+                <div class="analysis-loading-state" id="analysis-loading" style="display:none;">
+                    <div class="spinner-md"></div>
+                    <div class="loading-labels">
+                        <strong>Analyzing document…</strong>
+                        <span>NyayaAI is reviewing clauses and structure with Groq AI</span>
+                    </div>
+                </div>
+
+                <!-- Analysis Results Display Area -->
+                <div class="analysis-results-wrapper" id="analysis-results-area" style="display:none;">
+                    <!-- Full Structured Result (4 Sections) -->
+                    <div id="full-analysis-container" style="display:none;">
+                        <div class="analysis-section-block">
+                            <div class="section-block-header">
+                                <span class="block-icon">📋</span>
+                                <h3>Executive Summary</h3>
+                            </div>
+                            <div class="block-content-text" id="res-summary"></div>
+                        </div>
+
+                        <div class="analysis-section-block">
+                            <div class="section-block-header">
+                                <span class="block-icon">📌</span>
+                                <h3>Key Points &amp; Obligations</h3>
+                            </div>
+                            <div class="block-content-text" id="res-points"></div>
+                        </div>
+
+                        <div class="analysis-section-block section-warning">
+                            <div class="section-block-header">
+                                <span class="block-icon">⚠️</span>
+                                <h3>Possible Concerns &amp; Risks</h3>
+                            </div>
+                            <div class="block-content-text" id="res-concerns"></div>
+                        </div>
+
+                        <div class="analysis-section-block section-info">
+                            <div class="section-block-header">
+                                <span class="block-icon">❓</span>
+                                <h3>Questions for Your Lawyer</h3>
+                            </div>
+                            <div class="block-content-text" id="res-questions"></div>
+                        </div>
+                    </div>
+
+                    <!-- Single Mode Text Result -->
+                    <div id="text-analysis-container" style="display:none;">
+                        <div class="analysis-section-block">
+                            <div class="section-block-header">
+                                <span class="block-icon" id="text-result-icon">📄</span>
+                                <h3 id="text-result-title">Analysis Result</h3>
+                            </div>
+                            <div class="block-content-text markdown-render" id="res-plain-text"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Initial Empty Prompt State in Right Column -->
+                <div class="analysis-empty-hint" id="analysis-empty-hint">
+                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="11" cy="11" r="8"></circle>
+                        <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                    </svg>
+                    <h4>Ready for Analysis</h4>
+                    <p>Select an analysis focus above and click "Run AI Analysis" to begin.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Legal Disclaimer -->
+    <div class="legal-disclaimer-card mt-5">
+        <div class="disclaimer-icon">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10"></circle>
+                <line x1="12" y1="16" x2="12" y2="12"></line>
+                <line x1="12" y1="8" x2="12.01" y2="8"></line>
+            </svg>
+        </div>
+        <div class="disclaimer-content">
+            <strong>Important Legal Notice:</strong> AI analysis provides general informational explanations of text clauses. It does not evaluate enforceability in court or substitute for counsel from an advocate.
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<div id="doc-metadata" data-doc-id="{{ doc.id }}" style="display: none;"></div>
+<script src="{{ url_for('static', filename='js/document.js') }}"></script>
+{% endblock %}

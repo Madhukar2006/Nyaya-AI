@@ -1,0 +1,157 @@
+{% extends "layout.html" %}
+{% block title %}Chat History{% endblock %}
+
+{% block content %}
+<div class="content-container">
+    <!-- Page Header -->
+    <div class="page-top-header">
+        <div>
+            <h1 class="page-main-heading">Chat History</h1>
+            <p class="page-subheading">View, resume, or manage your past legal conversations.</p>
+        </div>
+        <div class="header-action-group">
+            <a href="{{ url_for('chat') }}" class="btn btn-primary">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="12" y1="5" x2="12" y2="19"></line>
+                    <line x1="5" y1="12" x2="19" y2="12"></line>
+                </svg>
+                <span>New Chat</span>
+            </a>
+        </div>
+    </div>
+
+    <!-- Search Bar & Stats Header -->
+    <div class="history-controls-card">
+        <div class="search-input-wrapper">
+            <svg class="search-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="11" cy="11" r="8"></circle>
+                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+            </svg>
+            <input type="text" id="conv-search" class="search-control" placeholder="Search conversations by title or topic…">
+        </div>
+    </div>
+
+    {% if conversations %}
+    <!-- Conversations List -->
+    <div class="conv-items-list" id="conversation-list">
+        {% for conv in conversations %}
+        <div class="conv-item-card" id="conv-{{ conv.id }}" data-title="{{ conv.title | lower }}">
+            <a href="{{ url_for('chat_conversation', conv_id=conv.id) }}" class="conv-item-body">
+                <div class="conv-item-icon">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                    </svg>
+                </div>
+                <div class="conv-item-details">
+                    <h3 class="conv-item-title">{{ conv.title }}</h3>
+                    <div class="conv-item-meta">
+                        <span class="conv-item-date">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                            {{ conv.updated_at | datetimeformat('%b %d, %Y • %I:%M %p') }}
+                        </span>
+                    </div>
+                </div>
+            </a>
+            <div class="conv-item-actions">
+                <a href="{{ url_for('chat_conversation', conv_id=conv.id) }}" class="btn btn-secondary btn-sm" title="Resume chat">
+                    Resume
+                </a>
+                <button type="button" class="btn btn-danger-subtle btn-sm btn-delete-conv" data-id="{{ conv.id }}" title="Delete conversation">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="3 6 5 6 21 6"></polyline>
+                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                    </svg>
+                    <span>Delete</span>
+                </button>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- Empty search result state -->
+    <div class="empty-state-card" id="no-search-results" style="display:none;">
+        <div class="empty-state-icon">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="11" cy="11" r="8"></circle>
+                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+            </svg>
+        </div>
+        <h3>No matching conversations</h3>
+        <p>No conversations matched your search query. Try another keyword.</p>
+    </div>
+
+    {% else %}
+    <!-- Empty State -->
+    <div class="empty-state-card" id="empty-state">
+        <div class="empty-state-icon">
+            <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+            </svg>
+        </div>
+        <h3>No conversations yet</h3>
+        <p>You haven't started any legal consultations yet. Ask NyayaAI about laws, notices, rights, or contracts.</p>
+        <a href="{{ url_for('chat') }}" class="btn btn-primary">Start your first conversation</a>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Live Search Filter
+    const searchInput = document.getElementById('conv-search');
+    const convItems = document.querySelectorAll('.conv-item-card');
+    const noResults = document.getElementById('no-search-results');
+
+    if (searchInput) {
+        searchInput.addEventListener('input', function() {
+            const query = this.value.trim().toLowerCase();
+            let visibleCount = 0;
+
+            convItems.forEach(card => {
+                const title = card.getAttribute('data-title') || '';
+                if (!query || title.includes(query)) {
+                    card.style.display = 'flex';
+                    visibleCount++;
+                } else {
+                    card.style.display = 'none';
+                }
+            });
+
+            if (noResults) {
+                noResults.style.display = (visibleCount === 0 && convItems.length > 0) ? 'flex' : 'none';
+            }
+        });
+    }
+
+    // Delete Conversation Handler
+    document.querySelectorAll('.btn-delete-conv').forEach(btn => {
+        btn.addEventListener('click', function(e) {
+            e.preventDefault();
+            const convId = this.dataset.id;
+            if (!confirm('Are you sure you want to delete this conversation? This cannot be undone.')) return;
+
+            fetch(`/api/conversation/delete/${convId}`, { method: 'POST' })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    const row = document.getElementById(`conv-${convId}`);
+                    if (row) row.remove();
+                    if (window.showToast) window.showToast('Conversation deleted', 'success');
+                    
+                    // Check if list is empty
+                    const remaining = document.querySelectorAll('.conv-item-card');
+                    if (remaining.length === 0) {
+                        location.reload();
+                    }
+                } else {
+                    if (window.showToast) window.showToast(data.error || 'Failed to delete', 'error');
+                }
+            })
+            .catch(() => {
+                if (window.showToast) window.showToast('Failed to delete conversation', 'error');
+            });
+        });
+    });
+</script>
+{% endblock %}

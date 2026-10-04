@@ -1,0 +1,21 @@
+{% extends "layout.html" %}
+{% block title %}404 — Page Not Found{% endblock %}
+
+{% block content %}
+<div class="error-page-wrapper">
+    <div class="error-page-card">
+        <div class="error-badge">404</div>
+        <h1 class="error-title">Page Not Found</h1>
+        <p class="error-description">The requested page or legal resource could not be found or may have moved.</p>
+        <div class="error-actions">
+            {% if session.get('user_id') %}
+            <a href="{{ url_for('dashboard') }}" class="btn btn-primary">Go to Dashboard</a>
+            <a href="{{ url_for('chat') }}" class="btn btn-secondary">Open Legal Chat</a>
+            {% else %}
+            <a href="{{ url_for('landing') }}" class="btn btn-primary">Return Home</a>
+            <a href="{{ url_for('login') }}" class="btn btn-secondary">Sign In</a>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

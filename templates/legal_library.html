@@ -1,0 +1,217 @@
+{% extends "layout.html" %}
+{% block title %}Legal Library{% endblock %}
+
+{% block content %}
+<div class="content-container">
+
+    {% if not selected_topic %}
+    <!-- Topic Grid View -->
+    <div class="page-top-header text-center-desktop">
+        <div class="header-center-wrap">
+            <h1 class="page-main-heading">Legal Library</h1>
+            <p class="page-subheading">Explore general legal information in simple language.</p>
+        </div>
+    </div>
+
+    <!-- Search Box -->
+    <div class="library-search-card">
+        <div class="search-input-wrapper">
+            <svg class="search-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="11" cy="11" r="8"></circle>
+                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+            </svg>
+            <input type="text" id="library-search" class="search-control" placeholder="Search legal topics (e.g. contracts, consumer rights, FIR, bail)…">
+        </div>
+    </div>
+
+    <!-- Topics Grid -->
+    <div class="library-topics-grid" id="topics-grid">
+        {% for key, topic in topics.items() %}
+        <a href="{{ url_for('legal_topic', topic=key) }}" class="library-topic-card" data-title="{{ topic.title | lower }}" data-desc="{{ topic.description | lower }}">
+            <div class="topic-card-icon">{{ topic.icon }}</div>
+            <div class="topic-card-body">
+                <h3 class="topic-card-title">{{ topic.title }}</h3>
+                <p class="topic-card-desc">{{ topic.description }}</p>
+            </div>
+            <div class="topic-card-footer">
+                <span class="topic-card-link">
+                    <span>Learn more</span>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="5" y1="12" x2="19" y2="12"></line>
+                        <polyline points="12 5 19 12 12 19"></polyline>
+                    </svg>
+                </span>
+            </div>
+        </a>
+        {% endfor %}
+    </div>
+
+    <!-- Empty search state -->
+    <div class="empty-state-card" id="library-no-results" style="display:none;">
+        <div class="empty-state-icon">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="11" cy="11" r="8"></circle>
+                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+            </svg>
+        </div>
+        <h3>No topics found</h3>
+        <p>No guides match your search. You can also ask NyayaAI directly in chat.</p>
+        <a href="{{ url_for('chat') }}" class="btn btn-primary btn-sm">Ask in Chat</a>
+    </div>
+
+    <!-- Legal Disclaimer -->
+    <div class="legal-disclaimer-card mt-5">
+        <div class="disclaimer-icon">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10"></circle>
+                <line x1="12" y1="16" x2="12" y2="12"></line>
+                <line x1="12" y1="8" x2="12.01" y2="8"></line>
+            </svg>
+        </div>
+        <div class="disclaimer-content">
+            <strong>Educational Resource:</strong> This library is prepared for general public awareness under Indian law. Rules and case laws evolve over time; consult an advocate for specific disputes.
+        </div>
+    </div>
+
+    {% else %}
+    <!-- Topic Detail View -->
+    {% set t = topics[selected_topic] %}
+    <div class="page-top-header">
+        <div>
+            <a href="{{ url_for('legal_library') }}" class="back-nav-link">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="19" y1="12" x2="5" y2="12"></line>
+                    <polyline points="12 19 5 12 12 5"></polyline>
+                </svg>
+                <span>Back to Legal Library</span>
+            </a>
+            <div class="topic-detail-heading-row mt-2">
+                <span class="topic-detail-icon">{{ t.icon }}</span>
+                <div>
+                    <h1 class="page-main-heading">{{ t.title }}</h1>
+                    <p class="page-subheading">{{ t.description }}</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Structured Content Card -->
+    <div class="card topic-content-card mb-4">
+        <!-- Overview -->
+        <section class="topic-content-section">
+            <h2 class="section-title-sm">
+                <span class="section-badge">1</span>
+                Overview &amp; Governing Law
+            </h2>
+            <p class="topic-body-text">{{ t.content.overview }}</p>
+        </section>
+
+        <hr class="section-divider">
+
+        <!-- Common Types & Issues -->
+        <section class="topic-content-section">
+            <h2 class="section-title-sm">
+                <span class="section-badge">2</span>
+                Common Issues &amp; Disputes
+            </h2>
+            <div class="topic-issues-grid">
+                {% for item in t.content.common_types %}
+                <div class="issue-pill-item">
+                    <span class="issue-bullet">•</span>
+                    <span>{{ item }}</span>
+                </div>
+                {% endfor %}
+            </div>
+        </section>
+
+        <hr class="section-divider">
+
+        <!-- What to do -->
+        <section class="topic-content-section">
+            <h2 class="section-title-sm">
+                <span class="section-badge">3</span>
+                Recommended Steps &amp; Action Plan
+            </h2>
+            <ol class="action-steps-list">
+                {% for item in t.content.what_to_do %}
+                <li class="action-step-item">
+                    <span class="step-num">{{ loop.index }}</span>
+                    <span class="step-text">{{ item }}</span>
+                </li>
+                {% endfor %}
+            </ol>
+        </section>
+
+        <!-- Important Note Callout -->
+        <div class="topic-callout-note">
+            <div class="callout-icon">💡</div>
+            <div class="callout-body">
+                <strong>Key Takeaway:</strong>
+                <p>{{ t.content.note }}</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Ask AI CTA Box -->
+    <div class="library-ai-cta-card">
+        <div class="cta-left">
+            <h3>Have a specific situation involving {{ t.title }}?</h3>
+            <p>Ask NyayaAI your questions directly to get tailored, step-by-step information.</p>
+        </div>
+        <div class="cta-right">
+            <a href="{{ url_for('chat') }}" class="btn btn-primary btn-lg">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                </svg>
+                <span>Ask NyayaAI about this</span>
+            </a>
+        </div>
+    </div>
+
+    <!-- Legal Disclaimer -->
+    <div class="legal-disclaimer-card mt-5">
+        <div class="disclaimer-icon">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10"></circle>
+                <line x1="12" y1="16" x2="12" y2="12"></line>
+                <line x1="12" y1="8" x2="12.01" y2="8"></line>
+            </svg>
+        </div>
+        <div class="disclaimer-content">
+            <strong>Important Legal Notice:</strong> Information in this guide is for general understanding only. Please consult a qualified lawyer for your specific facts and jurisdictional needs.
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Live Search for Topics Grid
+    const librarySearch = document.getElementById('library-search');
+    const topicCards = document.querySelectorAll('.library-topic-card');
+    const noResults = document.getElementById('library-no-results');
+
+    if (librarySearch) {
+        librarySearch.addEventListener('input', function() {
+            const query = this.value.trim().toLowerCase();
+            let matchCount = 0;
+
+            topicCards.forEach(card => {
+                const title = card.getAttribute('data-title') || '';
+                const desc = card.getAttribute('data-desc') || '';
+                if (!query || title.includes(query) || desc.includes(query)) {
+                    card.style.display = 'flex';
+                    matchCount++;
+                } else {
+                    card.style.display = 'none';
+                }
+            });
+
+            if (noResults) {
+                noResults.style.display = (matchCount === 0 && topicCards.length > 0) ? 'flex' : 'none';
+            }
+        });
+    }
+</script>
+{% endblock %}
