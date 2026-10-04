@@ -1,237 +1,197 @@
-# NyayaAI — AI-Powered Legal Assistance & Document Intelligence System
+# NyayaAI
 
-> **NyayaAI provides general legal information and is not a substitute for professional legal advice.**
+AI-powered legal information assistant for exploring general information about Indian law.
 
----
-
-## Problem Statement
-
-Access to legal knowledge in India is often limited by cost, language barriers, and lack of awareness. NyayaAI bridges this gap by providing a conversational AI interface that explains legal concepts, helps users understand their rights, and guides them through common legal situations — in English, Hindi, and Hinglish.
-
----
+> **Disclaimer:** NyayaAI provides general legal information for educational and informational purposes only. It is not a substitute for professional legal advice.
 
 ## Features
 
-- **AI Legal Chatbot** — Conversational Q&A powered by OpenAI GPT
-- **Multi-language Support** — English, Hindi, and Hinglish
-- **Chat History** — All conversations saved per user, viewable and deleteable
-- **Document Intelligence** — Upload PDF legal documents for AI-powered analysis
-- **Legal Library** — Browse common legal topics with practical guidance
-- **User Authentication** — Register, login, logout with secure password hashing
-- **Session-based Auth** — Protected routes, per-user data isolation
-- **Responsive UI** — Clean chatbot interface with suggestion buttons
+- AI legal assistant for general questions about Indian law
+- English, Hindi, and Hinglish support
+- Conversation history with user-specific chat storage
+- Legal document analysis
+- Support for PDF, DOCX, TXT, and Markdown files
+- Multiple document analysis modes
+- Legal library with common legal topics
+- User registration, login, logout, and profile management
+- Responsive web interface
+- Secure file handling and environment-based API configuration
 
----
-
-## Technology Stack
+## Tech Stack
 
 | Layer | Technology |
-|-------|-----------|
-| Backend | Python 3.x, Flask 3.0 |
-| AI | OpenAI GPT-4o-mini (via OpenAI Python SDK) |
-| Database | SQLite (via Python `sqlite3`) |
-| Auth | Flask sessions + Werkzeug password hashing |
-| PDF Parsing | PyPDF2 |
-| Frontend | HTML5, Vanilla CSS, Vanilla JavaScript |
-| Config | python-dotenv |
+|---|---|
+| Backend | Python, Flask |
+| AI | Groq API |
+| Database | SQLite |
+| Frontend | HTML5, CSS3, JavaScript |
+| Authentication | Flask Sessions, Werkzeug |
+| PDF Processing | pypdf |
+| DOCX Processing | python-docx |
+| Configuration | python-dotenv |
 
----
+## Project Structure
 
-## Project Architecture
-
-```
-NyayaAI/
-├── app.py                  # Main Flask application, routes, Jinja2 filters
-├── config.py               # Configuration class (loads from .env)
-├── requirements.txt        # Python dependencies
-├── .env.example            # Template for environment variables
-├── .gitignore              # Git exclusions
-├── README.md               # This file
+```text
+Nyaya-AI/
+├── app.py
+├── config.py
+├── requirements.txt
+├── .env.example
+├── .gitignore
+├── LICENSE
+│
 ├── database/
-│   ├── db.py               # SQLite helper functions (CRUD)
-│   └── schema.sql          # Table definitions
+│   ├── db.py
+│   └── schema.sql
+│
 ├── services/
-│   ├── ai_service.py       # OpenAI API integration
-│   └── document_service.py # PDF upload, text extraction
+│   ├── ai_service.py
+│   └── document_service.py
+│
 ├── templates/
-│   ├── layout.html         # Base template with navbar and flash messages
-│   ├── chat.html           # Main chat interface
-│   ├── login.html          # Login page
-│   ├── register.html       # Registration page
-│   ├── history.html        # Conversation history list
-│   ├── documents.html      # PDF upload and analysis results
-│   ├── legal_library.html  # Legal topic browser
-│   ├── profile.html        # User profile editor
-│   ├── 404.html            # 404 error page
-│   └── 500.html            # 500 error page
+│   ├── landing.html
+│   ├── layout.html
+│   ├── dashboard.html
+│   ├── chat.html
+│   ├── history.html
+│   ├── documents.html
+│   ├── document_view.html
+│   ├── legal_library.html
+│   ├── login.html
+│   ├── register.html
+│   ├── profile.html
+│   ├── 404.html
+│   └── 500.html
+│
 └── static/
-    ├── css/style.css       # Application stylesheet
-    └── js/main.js          # Chat UI JavaScript
+    ├── css/
+    │   └── style.css
+    └── js/
+        └── main.js
 ```
 
----
-
-## Database Schema
-
-```sql
--- Users
-CREATE TABLE users (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    username TEXT UNIQUE NOT NULL,
-    email TEXT UNIQUE NOT NULL,
-    password_hash TEXT NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
--- Conversations (one per chat session, belongs to user)
-CREATE TABLE conversations (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id INTEGER NOT NULL,
-    title TEXT NOT NULL DEFAULT 'New Conversation',
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-);
-
--- Messages (individual chat messages)
-CREATE TABLE messages (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    conversation_id INTEGER NOT NULL,
-    role TEXT NOT NULL CHECK(role IN ('user', 'assistant')),
-    content TEXT NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
-);
-```
-
----
-
-## OpenAI API Integration
-
-NyayaAI uses the **OpenAI Python SDK** with `gpt-4o-mini`:
-
-```python
-from openai import OpenAI
-from config import Config
-
-client = OpenAI(api_key=Config.OPENAI_API_KEY)
-
-response = client.chat.completions.create(
-    model="gpt-4o-mini",
-    messages=[
-        {"role": "system", "content": SYSTEM_PROMPT},
-        {"role": "user", "content": user_message}
-    ],
-    max_tokens=1500
-)
-
-answer = response.choices[0].message.content
-```
-
-The API key is **never** exposed in HTML, JavaScript, or browser requests — all calls are made server-side.
-
----
-
-## Installation
+## Getting Started
 
 ### Prerequisites
 
-- Python 3.10+
-- An OpenAI API key from [platform.openai.com](https://platform.openai.com)
+- Python 3.10 or later
+- A Groq API key
 
-### Steps
+### Clone the repository
 
 ```bash
-# 1. Clone the repository
-git clone https://github.com/madhukar2006/NyayaAI.git
-cd NyayaAI
+git clone https://github.com/Madhukar2006/Nyaya-AI.git
+cd Nyaya-AI
+```
 
-# 2. Create and activate a virtual environment
+### Create a virtual environment
+
+**Windows**
+
+```bash
 python -m venv .venv
-# Windows:
 .venv\Scripts\activate
-# macOS/Linux:
+```
+
+**macOS / Linux**
+
+```bash
+python3 -m venv .venv
 source .venv/bin/activate
+```
 
-# 3. Install dependencies
+### Install dependencies
+
+```bash
 pip install -r requirements.txt
+```
 
-# 4. Set up environment variables
-cp .env.example .env
-# Edit .env and add your actual Groq API key
+### Configure environment variables
 
-# 5. Run the application
+Create a `.env` file using `.env.example` as a reference:
+
+```env
+GROQ_API_KEY=your_groq_api_key_here
+SECRET_KEY=your_random_flask_secret_key_here
+GROQ_MODEL=qwen/qwen3.8-27b
+```
+
+Keep your API keys private and never commit the `.env` file.
+
+### Run the application
+
+```bash
 python app.py
 ```
 
-Visit `http://localhost:5000` in your browser.
+Open the application at:
 
----
-
-## Environment Setup
-
-Create a `.env` file in the project root:
-
-```env
-OPENAI_API_KEY=sk-your-actual-openai-api-key-here
-SECRET_KEY=your-random-secret-key-here
+```text
+http://127.0.0.1:5000
 ```
 
-> **Never commit your `.env` file.** It is excluded by `.gitignore`.
+## How It Works
 
----
+1. Users create an account and sign in.
+2. Legal questions are submitted through the chat interface.
+3. The Flask backend sends the request to the configured Groq model.
+4. AI responses are returned to the user and conversations are stored in SQLite.
+5. Users can upload supported documents for text extraction and AI analysis.
+6. Uploaded files are cleaned up after processing.
 
-## Usage
+## Document Support
 
-1. **Register** — Create an account at `/register`
-2. **Login** — Sign in at `/login`
-3. **Chat** — Ask legal questions in plain language at `/chat`
-4. **History** — View and delete past conversations at `/history`
-5. **Documents** — Upload a PDF legal document for AI analysis at `/documents`
-6. **Legal Library** — Browse topic guides at `/legal-library`
-7. **Profile** — Update your username or email at `/profile`
-8. **Logout** — End your session at `/logout`
+NyayaAI currently supports:
 
----
+| Format | Description |
+|---|---|
+| PDF | Extract and analyze selectable text |
+| DOCX | Extract and analyze Word document text |
+| TXT | Analyze plain text files |
+| MD | Analyze Markdown files |
+
+Scanned PDFs without selectable text may not be processed successfully.
 
 ## Security
 
-- Passwords stored as bcrypt hashes (via Werkzeug)
-- Flask session cookies (server-side session)
-- All private routes protected with `@login_required`
-- Conversation ownership verified on every request (users cannot access other users' data)
-- OpenAI API key loaded from environment — never exposed in frontend
-- Uploaded files sanitized with `werkzeug.utils.secure_filename`
-- File size limited to 5MB
-- PDF files deleted from server immediately after text extraction
-- `.env` excluded from Git via `.gitignore`
-- Internal errors never exposed to the user
+The application includes:
+
+- Password hashing using Werkzeug
+- Session-based authentication
+- Protected private routes
+- User-level access control for conversations and documents
+- Secure filename handling
+- Configurable upload size limits
+- API credentials stored in environment variables
+- Temporary uploaded-file cleanup
+
+## Legal Notice
+
+NyayaAI is an educational and informational project. AI-generated responses may contain incomplete or inaccurate information and should not be considered legal advice.
+
+For important legal matters, users should verify information with reliable official sources and consult a qualified legal professional.
+
+## Future Improvements
+
+- OCR support for scanned documents
+- Additional document formats
+- Voice input
+- More regional Indian languages
+- Integration with official legal and government resources
+- Conversation export
+- Case tracking and reminders
+
+## License
+
+This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
+
+## Author
+
+**Madhukar Pal**
+
+GitHub: [@Madhukar2006](https://github.com/Madhukar2006)
 
 ---
 
-## Legal Disclaimer
-
-NyayaAI provides **general legal information only**. It is **not** a law firm and does not provide legal advice. No attorney-client relationship is created by using NyayaAI.
-
-For specific legal matters, always consult a qualified legal professional.
-
----
-
-## AI Assistance Disclosure
-
-This application uses OpenAI's language model (GPT-4o-mini) to generate responses. AI responses may contain inaccuracies. NyayaAI will never:
-- Invent laws, court cases, or legal citations
-- Guarantee legal outcomes
-- Claim to be a licensed lawyer
-
----
-
-## Future Scope
-
-- [ ] Support for more document types (DOCX, images via OCR)
-- [ ] Voice input support
-- [ ] Case tracking and reminders
-- [ ] Regional language support (Tamil, Telugu, Bengali, etc.)
-- [ ] Integration with official government legal portals
-- [ ] Lawyer directory / referral feature
-- [ ] Export conversation as PDF
+Built as an AI and web development project to make general legal information easier to understand and explore.
