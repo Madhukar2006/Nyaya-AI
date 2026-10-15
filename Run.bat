@@ -30,3 +30,15 @@ if not exist "requirements.txt" (
     pause
     exit /b 1
 )
+
+echo Starting NyayaAI at http://127.0.0.1:5000
+start "" "http://127.0.0.1:5000"
+"%PYTHON%" app.py
+
+if errorlevel 1 (
+    echo.
+    echo NyayaAI stopped because an error occurred.
+    pause
+)
+
+endlocal
